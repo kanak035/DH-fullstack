@@ -85,7 +85,7 @@ export default function LandingPage() {
           <div className="text-center mb-20">
             <h2 className="section-title">The Giving Circle</h2>
             <p className="section-subtitle">
-              Your passion for golf meets a purpose that matters. We've built an ecosystem where your performance directly fuels positive change globally.
+              Your passion for golf meets a purpose that matters. We&apos;ve built an ecosystem where your performance directly fuels positive change globally.
             </p>
           </div>
 
@@ -106,7 +106,7 @@ export default function LandingPage() {
                 description: "Participate in monthly draws for 3, 4, and 5-number matches. Jackpots roll over until a champion is crowned.",
                 icon: <Trophy className="w-10 h-10 text-amber-500" />
               }
-            ].map((feature, idx) => (
+            ].map((feature) => (
               <div key={feature.title} className="p-10 rounded-[2.5rem] bg-gradient-to-br from-white/5 to-transparent border border-white/10 hover:border-white/20 transition-all">
                 <div className="mb-8">{feature.icon}</div>
                 <h3 className="text-2xl font-bold mb-4">{feature.title}</h3>

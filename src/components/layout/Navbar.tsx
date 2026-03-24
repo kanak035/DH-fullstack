@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, X, Trophy, Heart, LayoutDashboard } from "lucide-react";
+import { Menu, X, Trophy, Heart, LayoutDashboard, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { signOut } from "@/app/auth/actions";
 
-export default function Navbar() {
+type NavbarProps = {
+  userEmail: string | null;
+};
+
+export default function Navbar({ userEmail }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -42,9 +47,26 @@ export default function Navbar() {
                 <span>{link.name}</span>
               </Link>
             ))}
-            <Link href="/subscribe" className="bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-6 py-2.5 rounded-full transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary-500/20">
-              Subscribe Now
-            </Link>
+            {userEmail ? (
+              <div className="flex items-center space-x-3">
+                <span className="max-w-44 truncate text-sm text-slate-400">
+                  {userEmail}
+                </span>
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center space-x-2 rounded-full border border-white/10 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-white/5"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <Link href="/login" className="bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-6 py-2.5 rounded-full transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary-500/20">
+                Member Login
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -72,9 +94,18 @@ export default function Navbar() {
                   <span>{link.name}</span>
                 </Link>
               ))}
-              <Link href="/subscribe" onClick={() => setIsOpen(false)} className="block w-full text-center bg-primary-600 text-white font-semibold py-4 rounded-2xl">
-                Subscribe Now
-              </Link>
+              {userEmail ? (
+                <form action={signOut}>
+                  <button type="submit" className="flex w-full items-center justify-center space-x-3 rounded-2xl border border-white/10 py-4 font-semibold text-white">
+                    <LogOut className="w-5 h-5" />
+                    <span>Sign Out</span>
+                  </button>
+                </form>
+              ) : (
+                <Link href="/login" onClick={() => setIsOpen(false)} className="block w-full text-center bg-primary-600 text-white font-semibold py-4 rounded-2xl">
+                  Member Login
+                </Link>
+              )}
             </div>
           </motion.div>
         )}

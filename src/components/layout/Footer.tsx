@@ -18,7 +18,7 @@ export default function Footer() {
               </span>
             </Link>
             <p className="text-slate-400 max-w-sm text-sm leading-relaxed">
-              We're redefining the golf experience by combining elite performance tracking with meaningful charitable impact. Every score counts, every subscription gives back.
+              We&apos;re redefining the golf experience by combining elite performance tracking with meaningful charitable impact. Every score counts, every subscription gives back.
             </p>
           </div>
           

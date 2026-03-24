@@ -2,19 +2,62 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Mail, Lock, ArrowRight, Github, ChevronLeft } from "lucide-react";
+import { Trophy, Mail, Lock, ArrowRight, ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Supabase login logic placeholder
-    setTimeout(() => setLoading(false), 1500); 
+    setMessage(null);
+    setError(null);
+
+    const supabase = createClient();
+
+    if (mode === "login") {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        setError(signInError.message);
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectTo,
+      },
+    });
+
+    if (signUpError) {
+      setError(signUpError.message);
+      setLoading(false);
+      return;
+    }
+
+    setMessage("Account created. Check your email to confirm your account, then sign in.");
+    setLoading(false);
   };
 
   return (
@@ -47,6 +90,31 @@ export default function LoginPage() {
         </div>
 
         <div className="glass p-8 rounded-3xl border border-white/10 shadow-2xl">
+          <div className="mb-6 grid grid-cols-2 rounded-2xl border border-white/10 bg-white/5 p-1 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("login");
+                setMessage(null);
+                setError(null);
+              }}
+              className={`rounded-xl px-4 py-3 font-semibold transition-colors ${mode === "login" ? "bg-primary-600 text-white" : "text-slate-400 hover:text-white"}`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setMessage(null);
+                setError(null);
+              }}
+              className={`rounded-xl px-4 py-3 font-semibold transition-colors ${mode === "signup" ? "bg-primary-600 text-white" : "text-slate-400 hover:text-white"}`}
+            >
+              Create Account
+            </button>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Member Email</label>
@@ -78,28 +146,51 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {error ? (
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {error}
+              </div>
+            ) : null}
+
+            {message ? (
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                {message}
+              </div>
+            ) : null}
+
             <button
               type="submit"
               disabled={loading}
               className="w-full btn-primary py-4 flex items-center justify-center space-x-2 group"
             >
-              <span>{loading ? "Verifying..." : "Enter Workspace"}</span>
+              <span>
+                {loading
+                  ? mode === "login"
+                    ? "Signing in..."
+                    : "Creating account..."
+                  : mode === "login"
+                    ? "Enter Workspace"
+                    : "Create Member Account"}
+              </span>
               {!loading && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
             </button>
           </form>
 
-          <div className="mt-8 pt-8 border-t border-white/5 space-y-4">
-            <button className="w-full py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center space-x-3 text-sm font-medium text-slate-300">
-              <Github className="w-5 h-5" />
-              <span>Sign in with GitHub</span>
-            </button>
-          </div>
+          <p className="mt-6 text-center text-xs leading-6 text-slate-500">
+            {mode === "login"
+              ? "Use the email and password you registered with in Supabase Auth."
+              : "If email confirmation is enabled in Supabase, you must confirm the email before the dashboard session is created."}
+          </p>
 
           <p className="mt-8 text-center text-sm text-slate-500">
             New to the giving circle?{" "}
-            <Link href="/subscribe" className="text-primary-400 hover:text-primary-300 font-semibold">
-              Begin Subscription
-            </Link>
+            <button
+              type="button"
+              onClick={() => setMode(mode === "login" ? "signup" : "login")}
+              className="text-primary-400 hover:text-primary-300 font-semibold"
+            >
+              {mode === "login" ? "Create your account" : "Already have an account?"}
+            </button>
           </p>
         </div>
       </motion.div>
