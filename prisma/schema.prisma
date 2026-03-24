@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SUBSCRIBER
+  PUBLIC
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  role          UserRole  @default(PUBLIC)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  subscription  Subscription?
+  scores        Score[]
+  charities     UserCharity[]
+  winnings      Winner[]
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id])
+  plan                 String   // "MONTHLY" or "YEARLY"
+  status               String   // "ACTIVE", "INACTIVE", "CANCELED"
+  stripeId             String?  @unique
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  
+  charityPercentage    Int      @default(10) // 10% minimum
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model Score {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  value     Int      // 1-45 Stableford
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model Charity {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  imageUrl    String?
+  featured    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserCharity[]
+}
+
+model UserCharity {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  charityId  String
+  charity    Charity  @relation(fields: [charityId], references: [id])
+  percentage Int      @default(10)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, charityId])
+}
+
+model Draw {
+  id          String   @id @default(cuid())
+  month       Int
+  year        Int
+  status      String   @default("DRAFT") // "DRAFT", "PUBLISHED"
+  logicType   String   @default("RANDOM") // "RANDOM", "ALGORITHMIC"
+  winningNums Json?    // Array of winning numbers
+  prizePool   Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  winners     Winner[]
+
+  @@unique([month, year])
+}
+
+model Winner {
+  id                 String   @id @default(cuid())
+  drawId             String
+  draw               Draw     @relation(fields: [drawId], references: [id])
+  userId             String
+  user               User     @relation(fields: [userId], references: [id])
+  matchType          String   // "THREE", "FOUR", "FIVE"
+  prizeAmount        Float
+  proofUrl           String?
+  verificationStatus String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
+  payoutStatus       String   @default("PENDING") // "PENDING", "PAID"
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([drawId, userId, matchType])
+}
