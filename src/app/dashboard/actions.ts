@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { enforceRollingScores } from "@/lib/scores";
+import { getStripe, getStripePriceId } from "@/lib/stripe";
 import { ensureUserProfile } from "@/lib/users";
 
 export async function recordScore(formData: FormData) {
@@ -43,6 +45,8 @@ export async function recordScore(formData: FormData) {
       date: dateValue,
     },
   });
+
+  await enforceRollingScores(appUser.id);
 
   revalidatePath("/dashboard");
 }
@@ -162,4 +166,60 @@ export async function saveSubscription(formData: FormData) {
   });
 
   revalidatePath("/dashboard");
+}
+
+export async function createCheckoutSession(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user?.email) {
+    redirect("/login");
+  }
+
+  const appUser = await ensureUserProfile(user);
+
+  if (!appUser) {
+    throw new Error("Unable to sync authenticated user.");
+  }
+
+  const plan = formData.get("plan");
+
+  if (plan !== "MONTHLY" && plan !== "YEARLY") {
+    throw new Error("A valid Stripe checkout plan is required.");
+  }
+
+  const stripe = getStripe();
+  const priceId = getStripePriceId(plan);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    customer_email: appUser.email,
+    line_items: [
+      {
+        price: priceId,
+        quantity: 1,
+      },
+    ],
+    metadata: {
+      userId: appUser.id,
+      plan,
+    },
+    subscription_data: {
+      metadata: {
+        userId: appUser.id,
+        plan,
+      },
+    },
+    success_url: `${appUrl}/dashboard?checkout=success`,
+    cancel_url: `${appUrl}/dashboard?checkout=cancelled`,
+  });
+
+  if (!session.url) {
+    throw new Error("Stripe checkout session did not return a redirect URL.");
+  }
+
+  redirect(session.url);
 }

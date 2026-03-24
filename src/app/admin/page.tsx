@@ -1,6 +1,13 @@
 import { redirect } from "next/navigation";
-import { Check, Sparkles, Star } from "lucide-react";
-import { createCharity, setFeaturedCharity } from "@/app/admin/actions";
+import { Check, Sparkles, Star, Trophy } from "lucide-react";
+import {
+  createCharity,
+  publishDrawAction,
+  runDrawSimulation,
+  setFeaturedCharity,
+  updateUserScore,
+} from "@/app/admin/actions";
+import { buildDrawPreview } from "@/lib/draws";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { findUserByEmail } from "@/lib/users";
@@ -27,6 +34,34 @@ export default async function AdminPage() {
       { updatedAt: "desc" },
     ],
   });
+  const recentScores = await prisma.score.findMany({
+    include: {
+      user: true,
+    },
+    orderBy: [
+      { date: "desc" },
+      { createdAt: "desc" },
+    ],
+    take: 10,
+  });
+  const now = new Date();
+  const currentMonth = now.getUTCMonth() + 1;
+  const currentYear = now.getUTCFullYear();
+  const drawPreview = await buildDrawPreview(currentYear, currentMonth, "RANDOM");
+  const draws = await prisma.draw.findMany({
+    include: {
+      winners: true,
+    },
+    orderBy: [
+      { year: "desc" },
+      { month: "desc" },
+    ],
+    take: 6,
+  });
+
+  function formatDateInput(date: Date) {
+    return date.toISOString().split("T")[0];
+  }
 
   return (
     <main className="min-h-screen bg-black px-6 py-10 text-white sm:px-10 lg:px-16">
@@ -163,6 +198,250 @@ export default async function AdminPage() {
             </div>
           </section>
         </div>
+
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-white">Recent score management</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Review and edit recent member scores. The rolling 5-score rule is enforced automatically after updates.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {recentScores.length ? (
+              recentScores.map((score) => (
+                <form
+                  key={score.id}
+                  action={updateUserScore}
+                  className="grid gap-4 rounded-[1.5rem] border border-white/10 bg-black/20 p-5 lg:grid-cols-[1.4fr_120px_180px_auto]"
+                >
+                  <input type="hidden" name="scoreId" value={score.id} />
+                  <div>
+                    <p className="text-sm font-semibold text-white">{score.user.email}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                      User score record
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                      Score
+                    </label>
+                    <input
+                      name="value"
+                      type="number"
+                      min="1"
+                      max="45"
+                      defaultValue={score.value}
+                      className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                      Date
+                    </label>
+                    <input
+                      name="date"
+                      type="date"
+                      defaultValue={formatDateInput(score.date)}
+                      className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                      required
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button className="w-full rounded-2xl border border-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/5">
+                      Save
+                    </button>
+                  </div>
+                </form>
+              ))
+            ) : (
+              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 px-6 py-10 text-center text-slate-400">
+                No score records yet.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <div className="mb-8 flex items-center gap-3">
+              <div className="rounded-2xl bg-primary-500/15 p-3">
+                <Trophy className="h-6 w-6 text-primary-400" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold text-white">Draw operations</h2>
+                <p className="text-sm text-slate-400">
+                  Simulate or publish the monthly draw with random or algorithmic logic.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-8 grid gap-4 rounded-[1.5rem] border border-white/10 bg-black/20 p-5 md:grid-cols-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Active subscribers</p>
+                <p className="mt-2 text-3xl font-semibold text-white">{drawPreview.activeSubscriberCount}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Current prize pool</p>
+                <p className="mt-2 text-3xl font-semibold text-white">${drawPreview.prizePool.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Jackpot rollover</p>
+                <p className="mt-2 text-3xl font-semibold text-white">${drawPreview.jackpotRollover.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Preview numbers</p>
+                <p className="mt-2 text-lg font-semibold text-white">{drawPreview.winningNumbers.join(" • ")}</p>
+              </div>
+            </div>
+
+            <form action={runDrawSimulation} className="grid gap-4 rounded-[1.5rem] border border-white/10 bg-black/20 p-5 md:grid-cols-[100px_120px_1fr_auto] md:items-end">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                  Month
+                </label>
+                <input
+                  name="month"
+                  type="number"
+                  min="1"
+                  max="12"
+                  defaultValue={currentMonth}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                  Year
+                </label>
+                <input
+                  name="year"
+                  type="number"
+                  min="2024"
+                  defaultValue={currentYear}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                  Logic
+                </label>
+                <select
+                  name="logicType"
+                  defaultValue="RANDOM"
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                >
+                  <option value="RANDOM" className="bg-slate-950 text-white">RANDOM</option>
+                  <option value="ALGORITHMIC" className="bg-slate-950 text-white">ALGORITHMIC</option>
+                </select>
+              </div>
+              <button className="rounded-2xl border border-white/10 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/5">
+                Run simulation
+              </button>
+            </form>
+
+            <form action={publishDrawAction} className="mt-4 grid gap-4 rounded-[1.5rem] border border-emerald-500/20 bg-emerald-500/5 p-5 md:grid-cols-[100px_120px_1fr_auto] md:items-end">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                  Month
+                </label>
+                <input
+                  name="month"
+                  type="number"
+                  min="1"
+                  max="12"
+                  defaultValue={currentMonth}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                  Year
+                </label>
+                <input
+                  name="year"
+                  type="number"
+                  min="2024"
+                  defaultValue={currentYear}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                  Logic
+                </label>
+                <select
+                  name="logicType"
+                  defaultValue="RANDOM"
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                >
+                  <option value="RANDOM" className="bg-slate-950 text-white">RANDOM</option>
+                  <option value="ALGORITHMIC" className="bg-slate-950 text-white">ALGORITHMIC</option>
+                </select>
+              </div>
+              <button className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-emerald-500">
+                Publish draw
+              </button>
+            </form>
+          </div>
+
+          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <h2 className="text-2xl font-semibold text-white">Recent draws</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Published and draft draw cycles with winner counts and prize pool totals.
+            </p>
+
+            <div className="mt-8 space-y-4">
+              {draws.length ? (
+                draws.map((draw) => (
+                  <article key={draw.id} className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-lg font-semibold text-white">
+                          {draw.month}/{draw.year}
+                        </p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                          {draw.logicType} • {draw.status}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-white">
+                        {draw.winners.length} winners
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prize pool</p>
+                        <p className="mt-1 text-white">${draw.prizePool.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Winning numbers</p>
+                        <p className="mt-1 text-white">
+                          {Array.isArray(draw.winningNums) ? draw.winningNums.join(" • ") : "Not simulated"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Tier spread</p>
+                        <p className="mt-1 text-white">
+                          {draw.winners.filter((winner) => winner.matchType === "THREE").length}/
+                          {draw.winners.filter((winner) => winner.matchType === "FOUR").length}/
+                          {draw.winners.filter((winner) => winner.matchType === "FIVE").length}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 px-6 py-10 text-center text-slate-400">
+                  No draws yet. Run a simulation or publish the current month.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );

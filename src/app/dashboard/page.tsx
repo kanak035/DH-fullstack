@@ -6,12 +6,13 @@ import {
   Calendar,
   Check,
   CreditCard,
+  ExternalLink,
   Heart,
   History,
   Target,
   Trophy,
 } from "lucide-react";
-import { recordScore, saveCharityPreference, saveSubscription } from "@/app/dashboard/actions";
+import { createCheckoutSession, recordScore, saveCharityPreference, saveSubscription } from "@/app/dashboard/actions";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { ensureUserProfile } from "@/lib/users";
@@ -280,6 +281,35 @@ export default async function DashboardPage() {
                     : "Activate a plan now so subscription status is driven from the database."}
                 </p>
               </div>
+
+              <form action={createCheckoutSession} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500" htmlFor="stripePlan">
+                    Stripe checkout plan
+                  </label>
+                  <select
+                    id="stripePlan"
+                    name="plan"
+                    defaultValue={member.subscription?.plan ?? "MONTHLY"}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  >
+                    <option value="MONTHLY" className="bg-slate-950 text-white">
+                      MONTHLY
+                    </option>
+                    <option value="YEARLY" className="bg-slate-950 text-white">
+                      YEARLY
+                    </option>
+                  </select>
+                </div>
+                <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-6 py-4 text-sm font-bold text-white transition hover:bg-white/5 sm:w-auto">
+                  <ExternalLink className="h-4 w-4" />
+                  <span>Open Stripe Checkout</span>
+                </button>
+              </form>
+
+              <p className="mt-3 text-xs text-slate-500">
+                Requires `STRIPE_SECRET_KEY`, `STRIPE_MONTHLY_PRICE_ID`, and `STRIPE_YEARLY_PRICE_ID` in `.env`.
+              </p>
             </div>
 
             <div className="glass p-8 rounded-[2.5rem] border border-white/10">
