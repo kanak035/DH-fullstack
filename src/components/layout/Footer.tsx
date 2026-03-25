@@ -1,7 +1,7 @@
 'use client';
 
 import Link from "next/link";
-import { Trophy, Github, Twitter, Instagram } from "lucide-react";
+import { Mail, Trophy, Globe } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -34,14 +34,11 @@ export default function Footer() {
           <div>
             <h4 className="text-white font-semibold mb-6">Connect</h4>
             <div className="flex space-x-5">
-              <Link href="#" className="text-slate-400 hover:text-white transition-colors">
-                <Github className="w-5 h-5" />
+              <Link href="mailto:support@digitalheroes.co.in" className="text-slate-400 hover:text-white transition-colors">
+                <Mail className="w-5 h-5" />
               </Link>
-              <Link href="#" className="text-slate-400 hover:text-white transition-colors">
-                <Twitter className="w-5 h-5" />
-              </Link>
-              <Link href="#" className="text-slate-400 hover:text-white transition-colors">
-                <Instagram className="w-5 h-5" />
+              <Link href="https://digitalheroes.co.in" className="text-slate-400 hover:text-white transition-colors">
+                <Globe className="w-5 h-5" />
               </Link>
             </div>
             <p className="mt-8 text-xs text-slate-500">
