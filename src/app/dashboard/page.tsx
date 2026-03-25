@@ -4,18 +4,18 @@ import {
   AlertCircle,
   ArrowUpRight,
   Calendar,
-  Check,
   CreditCard,
-  ExternalLink,
   Heart,
   History,
   Target,
   Trophy,
 } from "lucide-react";
-import { createCheckoutSession, recordScore, saveCharityPreference, saveSubscription } from "@/app/dashboard/actions";
+import { createBillingPortalSession, createCheckoutSession, recordScore, saveCharityPreference } from "@/app/dashboard/actions";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { ensureUserProfile } from "@/lib/users";
+import { getDashboardWinnings } from "@/lib/winners";
+import { submitWinnerProof } from "@/app/winners/actions";
 
 function formatDisplayDate(date: Date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -106,6 +106,7 @@ export default async function DashboardPage() {
     charities: fullUser?.charities ?? [],
     winnings: fullUser?.winnings ?? [],
   };
+  const winnings = await getDashboardWinnings(member.id);
 
   const latestScore = member.scores[0] ?? null;
   const selectedCharity = member.charities[0] ?? null;
@@ -142,6 +143,8 @@ export default async function DashboardPage() {
       icon: <Trophy className="w-5 h-5 text-amber-400" />,
     },
   ];
+
+  const totalWon = winnings.reduce((total, winner) => total + winner.prizeAmount, 0);
 
   return (
     <div className="min-h-screen bg-black pt-28 pb-20 px-4 sm:px-6 lg:px-8">
@@ -241,33 +244,9 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-white">Membership Plan</h2>
-                  <p className="text-slate-400 text-sm">Create or update your membership record in Prisma.</p>
+                  <p className="text-slate-400 text-sm">Manage your live Stripe-backed membership.</p>
                 </div>
               </div>
-
-              <form action={saveSubscription} className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500" htmlFor="plan">
-                    Plan
-                  </label>
-                  <select
-                    id="plan"
-                    name="plan"
-                    defaultValue={member.subscription?.plan ?? "MONTHLY"}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  >
-                    <option value="MONTHLY" className="bg-slate-950 text-white">
-                      MONTHLY
-                    </option>
-                    <option value="YEARLY" className="bg-slate-950 text-white">
-                      YEARLY
-                    </option>
-                  </select>
-                </div>
-                <button type="submit" className="btn-primary w-full py-4 sm:w-auto sm:px-8">
-                  {member.subscription ? "Update Plan" : "Activate Membership"}
-                </button>
-              </form>
 
               <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-slate-300">
                 <p className="font-semibold text-white">
@@ -302,13 +281,21 @@ export default async function DashboardPage() {
                   </select>
                 </div>
                 <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-6 py-4 text-sm font-bold text-white transition hover:bg-white/5 sm:w-auto">
-                  <ExternalLink className="h-4 w-4" />
                   <span>Open Stripe Checkout</span>
                 </button>
               </form>
 
+              <form action={createBillingPortalSession} className="mt-4">
+                <button
+                  type="submit"
+                  className="w-full rounded-2xl border border-white/10 px-6 py-4 text-sm font-bold text-white transition hover:bg-white/5"
+                >
+                  Open billing portal
+                </button>
+              </form>
+
               <p className="mt-3 text-xs text-slate-500">
-                Requires `STRIPE_SECRET_KEY`, `STRIPE_MONTHLY_PRICE_ID`, and `STRIPE_YEARLY_PRICE_ID` in `.env`.
+                Stripe checkout creates or renews the subscription. The billing portal handles plan changes and cancellations.
               </p>
             </div>
 
@@ -347,6 +334,73 @@ export default async function DashboardPage() {
                 ) : (
                   <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-6 py-10 text-center text-slate-400">
                     No scores yet. Record your first round above to populate your dashboard history.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="glass p-8 rounded-[2.5rem] border border-white/10">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-xl font-bold text-white flex items-center space-x-3">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <span>Winnings Overview</span>
+                </h3>
+                <span className="text-sm text-primary-400">{winnings.length} records</span>
+              </div>
+
+              <div className="mb-6 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Total won</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">${totalWon.toFixed(2)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Paid out</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">
+                    ${winnings.filter((winner) => winner.payoutStatus === "PAID").reduce((total, winner) => total + winner.prizeAmount, 0).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {winnings.length ? (
+                  winnings.map((winner) => (
+                    <div key={winner.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-white font-semibold">
+                            {winner.draw.month}/{winner.draw.year} • {winner.matchType} match
+                          </p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                            {winner.verificationStatus} • {winner.payoutStatus}
+                          </p>
+                        </div>
+                        <p className="text-lg font-semibold text-white">${winner.prizeAmount.toFixed(2)}</p>
+                      </div>
+
+                      <form action={submitWinnerProof} className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                        <input type="hidden" name="winnerId" value={winner.id} />
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                            Proof URL
+                          </label>
+                          <input
+                            name="proofUrl"
+                            type="url"
+                            defaultValue={winner.proofUrl ?? ""}
+                            placeholder="https://..."
+                            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                            required
+                          />
+                        </div>
+                        <button className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/5">
+                          Submit proof
+                        </button>
+                      </form>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-6 py-10 text-center text-slate-400">
+                    No winnings yet. Once a draw creates winners, your proof and payout status will appear here.
                   </div>
                 )}
               </div>
@@ -425,7 +479,7 @@ export default async function DashboardPage() {
 
               {selectedCharity ? (
                 <div className="mt-4 flex items-center space-x-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">
-                  <Check className="w-4 h-4" />
+                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
                   <span>Current selection saved</span>
                 </div>
               ) : null}

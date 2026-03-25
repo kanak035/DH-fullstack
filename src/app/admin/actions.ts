@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { buildDrawPreview, publishDraw } from "@/lib/draws";
+import { sendEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { enforceRollingScores } from "@/lib/scores";
 import { findUserByEmail } from "@/lib/users";
@@ -207,8 +208,79 @@ export async function publishDrawAction(formData: FormData) {
     throw new Error("Draw logic must be RANDOM or ALGORITHMIC.");
   }
 
-  await publishDraw(year, month, logicType);
+  const { draw, preview } = await publishDraw(year, month, logicType);
+
+  const winners = await prisma.winner.findMany({
+    where: { drawId: draw.id },
+    include: {
+      user: true,
+      draw: true,
+    },
+  });
+
+  await Promise.all(
+    winners.map((winner) =>
+      sendEmail({
+        to: winner.user.email,
+        subject: `You have a ${winner.matchType}-match win in ${winner.draw.month}/${winner.draw.year}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; color: #111;">
+            <h1>Your draw result is in</h1>
+            <p>You matched ${winner.matchType} numbers in the ${winner.draw.month}/${winner.draw.year} draw.</p>
+            <p>Prize amount: ${winner.prizeAmount.toFixed(2)}</p>
+            <p>Winning numbers: ${preview.winningNumbers.join(", ")}</p>
+          </div>
+        `,
+      }),
+    ),
+  );
 
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+}
+
+export async function notifyWinnerDecision({
+  winnerId,
+  status,
+}: {
+  winnerId: string;
+  status: "APPROVED" | "REJECTED" | "PAID";
+}) {
+  const winner = await prisma.winner.findUnique({
+    where: { id: winnerId },
+    include: {
+      user: true,
+      draw: true,
+    },
+  });
+
+  if (!winner) {
+    return;
+  }
+
+  const subjectMap = {
+    APPROVED: "Your winner submission has been approved",
+    REJECTED: "Your winner submission needs attention",
+    PAID: "Your prize payout has been marked complete",
+  } as const;
+
+  const bodyMap = {
+    APPROVED: "An admin has approved your proof submission. Your payout remains pending until marked complete.",
+    REJECTED: "An admin has rejected your proof submission. Please review your uploaded proof and resubmit if needed.",
+    PAID: "Your payout has been marked as paid in the admin panel.",
+  } as const;
+
+  await sendEmail({
+    to: winner.user.email,
+    subject: subjectMap[status],
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.6;">
+        <h1 style="margin: 0 0 16px;">${subjectMap[status]}</h1>
+        <p>${bodyMap[status]}</p>
+        <p><strong>Draw:</strong> ${winner.draw.month}/${winner.draw.year}</p>
+        <p><strong>Match type:</strong> ${winner.matchType}</p>
+        <p><strong>Prize amount:</strong> ${winner.prizeAmount.toFixed(2)}</p>
+      </div>
+    `,
+  });
 }

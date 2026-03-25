@@ -128,6 +128,7 @@ export async function POST(request: Request) {
 
         await syncStripeSubscription(subscription);
       }
+
       break;
     }
     case "customer.subscription.created":

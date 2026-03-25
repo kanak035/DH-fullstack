@@ -7,6 +7,7 @@ import {
   setFeaturedCharity,
   updateUserScore,
 } from "@/app/admin/actions";
+import { approveWinner, markWinnerPaid, rejectWinner } from "@/app/winners/actions";
 import { buildDrawPreview } from "@/lib/draws";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
@@ -58,6 +59,34 @@ export default async function AdminPage() {
     ],
     take: 6,
   });
+  const winners = await prisma.winner.findMany({
+    include: {
+      user: true,
+      draw: true,
+    },
+    orderBy: [
+      { verificationStatus: "asc" },
+      { payoutStatus: "asc" },
+      { updatedAt: "desc" },
+    ],
+    take: 12,
+  });
+  const analytics = {
+    totalUsers: await prisma.user.count(),
+    activeSubscriptions: await prisma.subscription.count({
+      where: { status: "ACTIVE" },
+    }),
+    totalPrizePool: await prisma.draw.aggregate({
+      _sum: {
+        prizePool: true,
+      },
+    }),
+    charityContributions: await prisma.userCharity.aggregate({
+      _sum: {
+        percentage: true,
+      },
+    }),
+  };
 
   function formatDateInput(date: Date) {
     return date.toISOString().split("T")[0];
@@ -263,6 +292,38 @@ export default async function AdminPage() {
           </div>
         </section>
 
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-white">Reports and analytics</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Core counts and totals surfaced for the PRD reporting requirement.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Total users</p>
+              <p className="mt-3 text-4xl font-semibold text-white">{analytics.totalUsers}</p>
+            </div>
+            <div className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Active subscriptions</p>
+              <p className="mt-3 text-4xl font-semibold text-white">{analytics.activeSubscriptions}</p>
+            </div>
+            <div className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prize pool total</p>
+              <p className="mt-3 text-4xl font-semibold text-white">
+                ${(analytics.totalPrizePool._sum.prizePool ?? 0).toFixed(2)}
+              </p>
+            </div>
+            <div className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Charity contribution sum</p>
+              <p className="mt-3 text-4xl font-semibold text-white">
+                {analytics.charityContributions._sum.percentage ?? 0}%
+              </p>
+            </div>
+          </div>
+        </section>
+
         <section className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur">
             <div className="mb-8 flex items-center gap-3">
@@ -440,6 +501,61 @@ export default async function AdminPage() {
                 </div>
               )}
             </div>
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-white">Winner verification</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Review submitted proofs, approve or reject winner claims, and mark payouts complete.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {winners.length ? (
+              winners.map((winner) => (
+                <article key={winner.id} className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-lg font-semibold text-white">
+                        {winner.user.email} • {winner.draw.month}/{winner.draw.year} • {winner.matchType}
+                      </p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                        {winner.verificationStatus} • {winner.payoutStatus} • ${winner.prizeAmount.toFixed(2)}
+                      </p>
+                      <p className="mt-2 text-sm text-slate-400">
+                        Proof: {winner.proofUrl ?? "Not submitted yet"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <form action={approveWinner}>
+                        <input type="hidden" name="winnerId" value={winner.id} />
+                        <button className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
+                          Approve
+                        </button>
+                      </form>
+                      <form action={rejectWinner}>
+                        <input type="hidden" name="winnerId" value={winner.id} />
+                        <button className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200">
+                          Reject
+                        </button>
+                      </form>
+                      <form action={markWinnerPaid}>
+                        <input type="hidden" name="winnerId" value={winner.id} />
+                        <button className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/5">
+                          Mark paid
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 px-6 py-10 text-center text-slate-400">
+                No winners yet. Publish a draw to create winner records.
+              </div>
+            )}
           </div>
         </section>
       </div>

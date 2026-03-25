@@ -113,61 +113,6 @@ export async function saveCharityPreference(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function saveSubscription(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user?.email) {
-    redirect("/login");
-  }
-
-  const appUser = await ensureUserProfile(user);
-
-  if (!appUser) {
-    throw new Error("Unable to sync authenticated user.");
-  }
-
-  const plan = formData.get("plan");
-  const validPlans = new Set(["MONTHLY", "YEARLY"]);
-
-  if (typeof plan !== "string" || !validPlans.has(plan)) {
-    throw new Error("A valid subscription plan is required.");
-  }
-
-  const existingCharitySelection = await prisma.userCharity.findFirst({
-    where: { userId: appUser.id },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  const charityPercentage = existingCharitySelection?.percentage ?? 10;
-  const now = new Date();
-  const currentPeriodEnd = new Date(now);
-  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + (plan === "YEARLY" ? 12 : 1));
-
-  await prisma.subscription.upsert({
-    where: { userId: appUser.id },
-    update: {
-      plan,
-      status: "ACTIVE",
-      charityPercentage,
-      currentPeriodStart: now,
-      currentPeriodEnd,
-    },
-    create: {
-      userId: appUser.id,
-      plan,
-      status: "ACTIVE",
-      charityPercentage,
-      currentPeriodStart: now,
-      currentPeriodEnd,
-    },
-  });
-
-  revalidatePath("/dashboard");
-}
-
 export async function createCheckoutSession(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -220,6 +165,48 @@ export async function createCheckoutSession(formData: FormData) {
   if (!session.url) {
     throw new Error("Stripe checkout session did not return a redirect URL.");
   }
+
+  redirect(session.url);
+}
+
+export async function createBillingPortalSession() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user?.email) {
+    redirect("/login");
+  }
+
+  const appUser = await ensureUserProfile(user);
+
+  if (!appUser) {
+    throw new Error("Unable to sync authenticated user.");
+  }
+
+  const stripe = getStripe();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  const existingSubscription = await prisma.subscription.findFirst({
+    where: { userId: appUser.id },
+    select: {
+      stripeId: true,
+    },
+  });
+
+  if (!existingSubscription?.stripeId) {
+    throw new Error("No Stripe subscription is linked to this account yet.");
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(existingSubscription.stripeId);
+  const customerId =
+    typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: `${appUrl}/dashboard`,
+  });
 
   redirect(session.url);
 }
