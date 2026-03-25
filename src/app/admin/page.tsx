@@ -2,10 +2,13 @@ import { redirect } from "next/navigation";
 import { Check, Sparkles, Star, Trophy } from "lucide-react";
 import {
   createCharity,
+  deleteCharity,
   publishDrawAction,
   runDrawSimulation,
   setFeaturedCharity,
+  updateCharity,
   updateUserScore,
+  updateUserSubscription,
 } from "@/app/admin/actions";
 import { approveWinner, markWinnerPaid, rejectWinner } from "@/app/winners/actions";
 import { buildDrawPreview } from "@/lib/draws";
@@ -44,6 +47,13 @@ export default async function AdminPage() {
       { createdAt: "desc" },
     ],
     take: 10,
+  });
+  const users = await prisma.user.findMany({
+    include: {
+      subscription: true,
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 12,
   });
   const now = new Date();
   const currentMonth = now.getUTCMonth() + 1;
@@ -208,15 +218,49 @@ export default async function AdminPage() {
                           {charity.description}
                         </p>
                       </div>
-                      {!charity.featured ? (
-                        <form action={setFeaturedCharity}>
+                      <div className="flex flex-wrap gap-2">
+                        {!charity.featured ? (
+                          <form action={setFeaturedCharity}>
+                            <input type="hidden" name="charityId" value={charity.id} />
+                            <button className="rounded-full border border-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-white transition hover:bg-white/5">
+                              Feature
+                            </button>
+                          </form>
+                        ) : null}
+                        <form action={deleteCharity}>
                           <input type="hidden" name="charityId" value={charity.id} />
-                          <button className="rounded-full border border-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-white transition hover:bg-white/5">
-                            Feature
+                          <button className="rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-red-200 transition hover:bg-red-500/20">
+                            Delete
                           </button>
                         </form>
-                      ) : null}
+                      </div>
                     </div>
+                    <form action={updateCharity} className="mt-4 grid gap-3 md:grid-cols-4">
+                      <input type="hidden" name="charityId" value={charity.id} />
+                      <input
+                        name="name"
+                        defaultValue={charity.name}
+                        className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white"
+                      />
+                      <input
+                        name="imageUrl"
+                        defaultValue={charity.imageUrl ?? ""}
+                        className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white"
+                        placeholder="Image URL"
+                      />
+                      <input
+                        name="description"
+                        defaultValue={charity.description}
+                        className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white md:col-span-2"
+                      />
+                      <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
+                        <input type="checkbox" name="featured" defaultChecked={charity.featured} className="h-4 w-4 accent-violet-500" />
+                        Featured
+                      </label>
+                      <button className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/5 md:col-span-4">
+                        Save changes
+                      </button>
+                    </form>
                   </article>
                 ))
               ) : (
@@ -321,6 +365,57 @@ export default async function AdminPage() {
                 {analytics.charityContributions._sum.percentage ?? 0}%
               </p>
             </div>
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-white">User management</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              View users, edit subscription state, and keep the access model aligned with the subscription engine.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {users.length ? (
+              users.map((member) => (
+                <article key={member.id} className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+                  <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_auto] lg:items-end">
+                    <div>
+                      <p className="text-lg font-semibold text-white">{member.email}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                        {member.role}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Current subscription</p>
+                      <p className="mt-1 text-sm text-slate-300">
+                        {member.subscription ? `${member.subscription.plan} / ${member.subscription.status}` : "No subscription"}
+                      </p>
+                    </div>
+                    <form action={updateUserSubscription} className="grid gap-3 md:grid-cols-[140px_140px_auto]">
+                      <input type="hidden" name="userId" value={member.id} />
+                      <select name="plan" defaultValue={member.subscription?.plan ?? "MONTHLY"} className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white">
+                        <option value="MONTHLY" className="bg-slate-950 text-white">MONTHLY</option>
+                        <option value="YEARLY" className="bg-slate-950 text-white">YEARLY</option>
+                      </select>
+                      <select name="status" defaultValue={member.subscription?.status ?? "ACTIVE"} className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white">
+                        <option value="ACTIVE" className="bg-slate-950 text-white">ACTIVE</option>
+                        <option value="INACTIVE" className="bg-slate-950 text-white">INACTIVE</option>
+                        <option value="CANCELED" className="bg-slate-950 text-white">CANCELED</option>
+                      </select>
+                      <button className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/5">
+                        Save subscription
+                      </button>
+                    </form>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 px-6 py-10 text-center text-slate-400">
+                No users found.
+              </div>
+            )}
           </div>
         </section>
 

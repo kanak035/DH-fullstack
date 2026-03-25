@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRollingScores } from "@/lib/scores";
 import { getStripe, getStripePriceId } from "@/lib/stripe";
 import { ensureUserProfile } from "@/lib/users";
+import { getAppUrl } from "@/lib/site-url";
 
 export async function recordScore(formData: FormData) {
   const supabase = await createClient();
@@ -137,7 +138,7 @@ export async function createCheckoutSession(formData: FormData) {
 
   const stripe = getStripe();
   const priceId = getStripePriceId(plan);
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = getAppUrl();
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -186,7 +187,7 @@ export async function createBillingPortalSession() {
   }
 
   const stripe = getStripe();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = getAppUrl();
 
   const existingSubscription = await prisma.subscription.findFirst({
     where: { userId: appUser.id },

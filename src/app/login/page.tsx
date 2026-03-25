@@ -6,6 +6,7 @@ import { Trophy, Mail, Lock, ArrowRight, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getAppUrl } from "@/lib/site-url";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function LoginPage() {
       return;
     }
 
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+    const redirectTo = `${getAppUrl()}/auth/callback`;
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
